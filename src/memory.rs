@@ -80,10 +80,10 @@ struct Mapping<'mapping> {
 pub trait MappedDevice {
     fn read_8(&self, index: usize) -> u8;
     fn read_16(&self, index: usize) -> u16;
+    fn size(&self) -> usize;
     fn write_8(&mut self, index: usize, value: u8);
     fn write_16(&mut self, index: usize, value: u16);
     fn reset(&mut self);
-    fn size(&self) -> usize;
 }
 
 pub struct RAM {
@@ -133,6 +133,10 @@ impl MappedDevice for RAM {
         value
     }
 
+    fn size(&self) -> usize {
+        self.memory.len()
+    }
+
     fn write_8(&mut self, index: usize, value: u8) {
         if index >= self.memory.len() {
             return;
@@ -151,10 +155,6 @@ impl MappedDevice for RAM {
 
     fn reset(&mut self) {
         self.memory.fill(0x00);
-    }
-
-    fn size(&self) -> usize {
-        self.memory.len()
     }
 }
 
