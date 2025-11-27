@@ -18,5 +18,5 @@ fn main() {
     cpu.memory_controller.add_mapping(RAM_START_INDEX, &mut ram).expect("Should not overlap");
     cpu.memory_controller.add_mapping(ROM_START_INDEX, &mut rom).expect("Should not overlap");
 
-    
+    cpu.reset();
 }
