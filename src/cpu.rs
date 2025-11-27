@@ -8,7 +8,7 @@ pub struct CPU<'cpu> {
     pub accumulator: u8,
 }
 
-impl<'cpu> CPU<'cpu> {
+impl CPU<'_> {
     pub fn new() -> Self {
         Self {
             memory_controller: MemoryController::new(),
