@@ -1,6 +1,6 @@
 use crate::memory::MemoryController;
 
-const RESET_VECTOR: u16 = 0xFFFE;
+const RESET_VECTOR: usize = 0xFFFE;
 
 pub struct CPU<'cpu> {
     pub instruction_pointer: u16,
@@ -18,8 +18,8 @@ impl<'cpu> CPU<'cpu> {
     }
 
     pub fn reset(&mut self) {
-        self.instruction_pointer = RESET_VECTOR;
         self.accumulator = 0x00;
         self.memory_controller.reset();
+        self.instruction_pointer = self.memory_controller.read_16(RESET_VECTOR);
     }
 }
