@@ -1,64 +1,111 @@
+pub const ADDRESS_SPACE: usize = 0x10000;
+pub const MAP_BLOCK_SIZE: usize = 0x1000;
+pub const MAP_BLOCKS: usize = ADDRESS_SPACE / MAP_BLOCK_SIZE;
+
 pub struct MemoryController<'memcontrol> {
+    blocks: [Option<usize>; MAP_BLOCKS],
     mappings: Vec<Mapping<'memcontrol>>,
 }
 
 impl<'memcontrol> MemoryController<'memcontrol> {
     pub fn new() -> Self {
         Self {
-            mappings: Vec::<Mapping>::new()
+            blocks: [None; MAP_BLOCKS],
+            mappings: vec![],
         }
     }
 
-    pub fn add_mapping(&mut self, start_index: usize, device: &'memcontrol mut dyn MappedDevice) -> Result<(), String> {
-        match self.mappings.iter().find(|mapping| start_index >= mapping.start_index && start_index < mapping.end_index || start_index < mapping.start_index && start_index + device.size() >= mapping.start_index) {
-            Some(_) => Err(String::from("New mapping overlaps existing mapping")),
+    pub fn map_device(&mut self, first_block: usize, blocks: usize, device: &'memcontrol mut dyn MappedDevice) -> Result<(), String> {
+        for block in first_block..first_block + blocks {
+            if self.blocks[block] != None {
+                return Err(format!("Block {} is already mapped to another device", block));
+            }
+        }
+
+        match self.mappings.iter().find(|mapping| std::ptr::eq(mapping.device, device)) {
+            Some(_) => Err(String::from("Device is already mapped")),
             None => {
                 self.mappings.push(Mapping {
-                    start_index,
-                    end_index: start_index + device.size(),
+                    offset: first_block * MAP_BLOCK_SIZE,
                     device,
                 });
 
+                let mapping_index = self.mappings.len() - 1;
+
+                for block in first_block..first_block + blocks {
+                    self.blocks[block] = Some(mapping_index);
+                }
+
                 Ok(())
-            }
+            },
         }
     }
 
-    pub fn read_8(&self, index: usize) -> u8 {
-        match self.mappings.iter().find(|mapping| index >= mapping.start_index && index < mapping.end_index) {
-            Some(mapping) => {
-                let mapped_index = index - mapping.start_index;
-                mapping.device.read_8(mapped_index)
+    pub fn unmap_device(&mut self, device: &'memcontrol mut dyn MappedDevice) -> Result<(), String> {
+        match self.mappings.iter().enumerate().find(|(_, mapping)| std::ptr::eq(mapping.device, device)) {
+            Some((i, _)) => {
+                self.mappings.swap_remove(i);
+
+                // Because swap_remove removes an element and replaces it with the last element in the vector, we need to update all the blocks that pointed to the last element
+                
+                let last_mapping_index = self.mappings.len(); // The current length of the vector equals the index of what the last element in the vector *used* to be
+
+                for block in &mut self.blocks {
+                    // Remove all indecies to the element we just removed
+                    if *block == Some(i) {
+                        *block = None;
+                    }
+                    // Change all indecies that used to point to the last element to point to the element it just replaced
+                    if *block == Some(last_mapping_index) {
+                        *block = Some(i);
+                    }
+                }
+
+                Ok(())
+            },
+            None => Err(String::from("Device is not mapped")),
+        }
+    }
+
+    pub fn read_8(&self, address: usize) -> u8 {
+        match self.blocks[address / MAP_BLOCK_SIZE] {
+            Some(mapping_index) => {
+                let translated_address = address - self.mappings[mapping_index].offset;
+
+                self.mappings[mapping_index].device.read_8(translated_address)
             },
             None => 0x00,
         }
     }
 
-    pub fn read_16(&self, index: usize) -> u16 {
-        match self.mappings.iter().find(|mapping| index >= mapping.start_index && index < mapping.end_index) {
-            Some(mapping) => {
-                let mapped_index = index - mapping.start_index;
-                mapping.device.read_16(mapped_index)
+    pub fn read_16(&self, address: usize) -> u16 {
+        match self.blocks[address / MAP_BLOCK_SIZE] {
+            Some(mapping_index) => {
+                let translated_address = address - self.mappings[mapping_index].offset;
+                
+                self.mappings[mapping_index].device.read_16(translated_address)
             },
             None => 0x00,
         }
     }
 
-    pub fn write_8(&mut self, index: usize, value: u8) {
-        match self.mappings.iter_mut().find(|mapping| index >= mapping.start_index && index < mapping.end_index) {
-            Some(mapping) => {
-                let mapped_index = index - mapping.start_index;
-                mapping.device.write_8(mapped_index, value);
+    pub fn write_8(&mut self, address: usize, value: u8) {
+        match self.blocks[address / MAP_BLOCK_SIZE] {
+            Some(mapping_index) => {
+                let translated_address = address - self.mappings[mapping_index].offset;
+                
+                self.mappings[mapping_index].device.write_8(translated_address, value)
             },
             None => (),
         }
     }
 
-    pub fn write_16(&mut self, index: usize, value: u16) {
-        match self.mappings.iter_mut().find(|mapping| index >= mapping.start_index && index < mapping.end_index) {
-            Some(mapping) => {
-                let mapped_index = index - mapping.start_index;
-                mapping.device.write_16(mapped_index, value);
+    pub fn write_16(&mut self, address: usize, value: u16) {
+        match self.blocks[address / MAP_BLOCK_SIZE] {
+            Some(mapping_index) => {
+                let translated_address = address - self.mappings[mapping_index].offset;
+                
+                self.mappings[mapping_index].device.write_16(translated_address, value)
             },
             None => (),
         }
@@ -72,17 +119,16 @@ impl<'memcontrol> MemoryController<'memcontrol> {
 }
 
 struct Mapping<'mapping> {
-    start_index: usize,
-    end_index: usize,
     device: &'mapping mut dyn MappedDevice,
+    offset: usize,
 }
 
 pub trait MappedDevice {
-    fn read_8(&self, index: usize) -> u8;
-    fn read_16(&self, index: usize) -> u16;
+    fn read_8(&self, address: usize) -> u8;
+    fn read_16(&self, address: usize) -> u16;
     fn size(&self) -> usize;
-    fn write_8(&mut self, index: usize, value: u8);
-    fn write_16(&mut self, index: usize, value: u16);
+    fn write_8(&mut self, address: usize, value: u8);
+    fn write_16(&mut self, address: usize, value: u16);
     fn reset(&mut self);
 }
 
@@ -97,13 +143,13 @@ impl RAM {
         }
     }
 
-    pub fn read_bytes(&mut self, index: usize, count: usize) -> &[u8] {
-        &self.memory[index..index + count]
+    pub fn read_bytes(&mut self, address: usize, count: usize) -> &[u8] {
+        &self.memory[address..address + count]
     }
 
-    pub fn write_bytes(&mut self, index: usize, bytes: &[u8]) {
+    pub fn write_bytes(&mut self, address: usize, bytes: &[u8]) {
         for (i, byte) in bytes.iter().enumerate() {
-            self.memory[index + i] = *byte;
+            self.memory[address + i] = *byte;
         }
     }
 
@@ -113,21 +159,21 @@ impl RAM {
 }
 
 impl MappedDevice for RAM {
-    fn read_8(&self, index: usize) -> u8 {
-        if index >= self.memory.len() {
+    fn read_8(&self, address: usize) -> u8 {
+        if address >= self.memory.len() {
             return 0x00;
         }
-        self.memory[index]
+        self.memory[address]
     }
 
-    fn read_16(&self, index: usize) -> u16 {
+    fn read_16(&self, address: usize) -> u16 {
         let mut value: u16 = 0x0000;
 
-        if index < self.memory.len() {
-            value &= self.memory[index] as u16;
+        if address < self.memory.len() {
+            value &= self.memory[address] as u16;
         }
-        if index + 1 < self.memory.len() {
-            value &= (self.memory[index + 1] as u16) << 8;
+        if address + 1 < self.memory.len() {
+            value &= (self.memory[address + 1] as u16) << 8;
         }
 
         value
@@ -137,19 +183,19 @@ impl MappedDevice for RAM {
         self.memory.len()
     }
 
-    fn write_8(&mut self, index: usize, value: u8) {
-        if index >= self.memory.len() {
+    fn write_8(&mut self, address: usize, value: u8) {
+        if address >= self.memory.len() {
             return;
         }
-        self.memory[index] = value;
+        self.memory[address] = value;
     }
 
-    fn write_16(&mut self, index: usize, value: u16) {
-        if index < self.memory.len() {
-            self.memory[index] = value as u8;
+    fn write_16(&mut self, address: usize, value: u16) {
+        if address < self.memory.len() {
+            self.memory[address] = value as u8;
         }
-        if index + 1 < self.memory.len() {
-            self.memory[index + 1] = (value >> 8) as u8;
+        if address + 1 < self.memory.len() {
+            self.memory[address + 1] = (value >> 8) as u8;
         }
     }
 
@@ -169,13 +215,13 @@ impl ROM {
         }
     }
 
-    pub fn read_bytes(&mut self, index: usize, count: usize) -> &[u8] {
-        &self.memory[index..index + count]
+    pub fn read_bytes(&mut self, address: usize, count: usize) -> &[u8] {
+        &self.memory[address..address + count]
     }
 
-    pub fn write_bytes(&mut self, index: usize, bytes: &[u8]) {
+    pub fn write_bytes(&mut self, address: usize, bytes: &[u8]) {
         for (i, byte) in bytes.iter().enumerate() {
-            self.memory[index + i] = *byte;
+            self.memory[address + i] = *byte;
         }
     }
 
@@ -185,21 +231,21 @@ impl ROM {
 }
 
 impl MappedDevice for ROM {
-    fn read_8(&self, index: usize) -> u8 {
-        if index >= self.memory.len() {
+    fn read_8(&self, address: usize) -> u8 {
+        if address >= self.memory.len() {
             return 0x00;
         }
-        self.memory[index]
+        self.memory[address]
     }
 
-    fn read_16(&self, index: usize) -> u16 {
+    fn read_16(&self, address: usize) -> u16 {
         let mut value: u16 = 0x0000;
 
-        if index < self.memory.len() {
-            value &= self.memory[index] as u16;
+        if address < self.memory.len() {
+            value &= self.memory[address] as u16;
         }
-        if index + 1 < self.memory.len() {
-            value &= (self.memory[index + 1] as u16) << 8;
+        if address + 1 < self.memory.len() {
+            value &= (self.memory[address + 1] as u16) << 8;
         }
 
         value
