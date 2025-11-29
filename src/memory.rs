@@ -172,10 +172,10 @@ impl MappedDevice for RAM {
         let mut value: u16 = 0x0000;
 
         if address < self.memory.len() {
-            value &= self.memory[address] as u16;
+            value |= self.memory[address] as u16;
         }
         if address + 1 < self.memory.len() {
-            value &= (self.memory[address + 1] as u16) << 8;
+            value |= (self.memory[address + 1] as u16) << 8;
         }
 
         value
@@ -244,10 +244,10 @@ impl MappedDevice for ROM {
         let mut value: u16 = 0x0000;
 
         if address < self.memory.len() {
-            value &= self.memory[address] as u16;
+            value |= self.memory[address] as u16;
         }
         if address + 1 < self.memory.len() {
-            value &= (self.memory[address + 1] as u16) << 8;
+            value |= (self.memory[address + 1] as u16) << 8;
         }
 
         value
