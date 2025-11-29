@@ -4,14 +4,13 @@ mod memory;
 use cpu::CPU;
 use memory::{RAM, ROM};
 
-const RAM_CAPACITY: usize = memory::MAP_BLOCK_SIZE;
-const ROM_CAPACITY: usize = memory::MAP_BLOCK_SIZE * 8;
-
-const RAM_FIRST_BLOCK: usize = 0x0000 / memory::MAP_BLOCK_SIZE;
+const RAM_CAPACITY: usize = 0x1000; // 4 KiB
+const ROM_CAPACITY: usize = 0x8000; // 32 KiB
 const RAM_BLOCKS: usize = RAM_CAPACITY / memory::MAP_BLOCK_SIZE;
-
-const ROM_FIRST_BLOCK: usize = 0x8000 / memory::MAP_BLOCK_SIZE;
 const ROM_BLOCKS: usize = ROM_CAPACITY / memory::MAP_BLOCK_SIZE;
+
+const RAM_FIRST_BLOCK: usize = 0; // Address: 0x0000
+const ROM_FIRST_BLOCK: usize = 8; // Address: 0x8000
 
 fn main() {
     let mut cpu = CPU::new();
