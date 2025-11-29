@@ -1,5 +1,7 @@
-pub const ADDRESS_SPACE: usize = 0x10000;
-pub const MAP_BLOCK_SIZE: usize = 0x1000;
+use crate::cpu::ADDRESS_BUS_WIDTH;
+
+pub const ADDRESS_SPACE: usize = 2_usize.pow(ADDRESS_BUS_WIDTH);
+pub const MAP_BLOCK_SIZE: usize = 0x1000; // 4 KiB
 pub const MAP_BLOCKS: usize = ADDRESS_SPACE / MAP_BLOCK_SIZE;
 
 pub struct MemoryController<'memcontrol> {

@@ -1,6 +1,8 @@
 use crate::memory::MemoryController;
 
-const RESET_VECTOR: usize = 0xFFFE;
+pub const DATA_BUS_WIDTH: u32 = 8;
+pub const ADDRESS_BUS_WIDTH: u32 = 16;
+pub const RESET_VECTOR: usize = 0xFFFE;
 
 pub struct CPU<'cpu> {
     pub memory_controller: MemoryController<'cpu>,
