@@ -8,6 +8,7 @@ pub struct CPU {
     pub memory_controller: MemoryController,
     pub program_counter: u16,
     pub accumulator: u8,
+    pub status: u8,
 }
 
 impl CPU {
@@ -16,6 +17,7 @@ impl CPU {
             memory_controller: MemoryController::new(),
             program_counter: 0x0000,
             accumulator: 0x00,
+            status: 0b00000000,
         }
     }
 
@@ -23,5 +25,6 @@ impl CPU {
         self.memory_controller.reset();
         self.program_counter = self.memory_controller.read_16(RESET_VECTOR);
         self.accumulator = 0x00;
+        self.status = 0b00000000;
     }
 }
