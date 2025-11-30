@@ -17,9 +17,7 @@ const ROM_FIRST_BLOCK: usize = ROM_FIRST_ADDRESS / memory::MAP_BLOCK_SIZE;
 fn main() {
     let mut cpu = CPU::new();
 
-    //rom.poke_bytes(cpu::RESET_VECTOR - ROM_FIRST_ADDRESS, &[low_byte, high_byte]);
-
-    let ram_index = cpu.memory_controller.map_device(RAM_FIRST_BLOCK, RAM_BLOCKS, Box::new(RAM::new(RAM_CAPACITY))).expect("Should not overlap");
+    cpu.memory_controller.map_device(RAM_FIRST_BLOCK, RAM_BLOCKS, Box::new(RAM::new(RAM_CAPACITY))).expect("Should not overlap");
     let rom_index = cpu.memory_controller.map_device(ROM_FIRST_BLOCK, ROM_BLOCKS, Box::new(ROM::new(ROM_CAPACITY))).expect("Should not overlap");
 
     // Set reset vector to the first address in ROM
