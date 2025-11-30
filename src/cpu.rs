@@ -4,13 +4,13 @@ pub const DATA_BUS_WIDTH: u32 = 8;
 pub const ADDRESS_BUS_WIDTH: u32 = 16;
 pub const RESET_VECTOR: usize = 0xFFFE;
 
-pub struct CPU<'cpu> {
-    pub memory_controller: MemoryController<'cpu>,
+pub struct CPU {
+    pub memory_controller: MemoryController,
     pub instruction_pointer: u16,
     pub accumulator: u8,
 }
 
-impl CPU<'_> {
+impl CPU {
     pub fn new() -> Self {
         Self {
             memory_controller: MemoryController::new(),

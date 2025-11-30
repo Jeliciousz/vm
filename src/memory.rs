@@ -4,12 +4,12 @@ pub const ADDRESS_SPACE: usize = 2_usize.pow(ADDRESS_BUS_WIDTH);
 pub const MAP_BLOCK_SIZE: usize = 0x1000; // 4 KiB
 pub const MAP_BLOCKS: usize = ADDRESS_SPACE / MAP_BLOCK_SIZE;
 
-pub struct MemoryController<'memcontrol> {
+pub struct MemoryController {
     blocks: [Option<usize>; MAP_BLOCKS],
-    mappings: Vec<Mapping<'memcontrol>>,
+    mappings: Vec<Mapping>,
 }
 
-impl<'memcontrol> MemoryController<'memcontrol> {
+impl MemoryController {
     pub fn new() -> Self {
         Self {
             blocks: [None; MAP_BLOCKS],
@@ -17,56 +17,67 @@ impl<'memcontrol> MemoryController<'memcontrol> {
         }
     }
 
-    pub fn map_device(&mut self, first_block: usize, blocks: usize, device: &'memcontrol mut dyn MappedDevice) -> Result<(), String> {
+    // Returns index of device mapping or an error
+    pub fn map_device(&mut self, first_block: usize, blocks: usize, device: Box<dyn MappedDevice>) -> Result<usize, String> {
         for block in first_block..first_block + blocks {
             if self.blocks[block] != None {
                 return Err(format!("Block {} is already mapped to another device", block));
             }
         }
 
-        match self.mappings.iter().find(|mapping| std::ptr::eq(mapping.device, device)) {
-            Some(_) => Err(String::from("Device is already mapped")),
-            None => {
-                self.mappings.push(Mapping {
-                    offset: first_block * MAP_BLOCK_SIZE,
-                    device,
-                });
+        self.mappings.push(Mapping {
+            offset: first_block * MAP_BLOCK_SIZE,
+            device,
+         });
 
-                let mapping_index = self.mappings.len() - 1;
+        let mapping_index = self.mappings.len() - 1;
 
-                for block in first_block..first_block + blocks {
-                    self.blocks[block] = Some(mapping_index);
-                }
-
-                Ok(())
-            },
+        for block in first_block..first_block + blocks {
+            self.blocks[block] = Some(mapping_index);
         }
+
+        Ok(mapping_index)
     }
 
-    pub fn unmap_device(&mut self, device: &'memcontrol mut dyn MappedDevice) -> Result<(), String> {
-        match self.mappings.iter().enumerate().find(|(_, mapping)| std::ptr::eq(mapping.device, device)) {
-            Some((i, _)) => {
-                self.mappings.swap_remove(i);
-
-                // Because swap_remove removes an element and replaces it with the last element in the vector, we need to update all the blocks that pointed to the last element
-                
-                let last_mapping_index = self.mappings.len(); // The current length of the vector equals the index of what the last element in the vector *used* to be
-
-                for block in &mut self.blocks {
-                    // Remove all indecies to the element we just removed
-                    if *block == Some(i) {
-                        *block = None;
-                    }
-                    // Change all indecies that used to point to the last element to point to the element it just replaced
-                    if *block == Some(last_mapping_index) {
-                        *block = Some(i);
-                    }
-                }
-
-                Ok(())
-            },
-            None => Err(String::from("Device is not mapped")),
+    pub fn unmap_device(&mut self, mapping_index: usize) -> Result<(), String> {
+        if mapping_index >= self.mappings.len() {
+            return Err(format!("Index {} is out-of-bounds", mapping_index));
         }
+
+        self.mappings.swap_remove(mapping_index);
+
+        // Because swap_remove removes an element and replaces it with the last element in the vector, we need to update all the blocks that pointed to the last element
+                
+        let last_mapping_index = self.mappings.len(); // The current length of the vector equals the index of what the last element in the vector *used* to be
+
+        for block in &mut self.blocks {
+            // Remove all indecies to the element we just removed
+            if *block == Some(mapping_index) {
+                *block = None;
+            }
+            // Change all indecies that used to point to the last element to point to the element it just replaced
+            if *block == Some(last_mapping_index) {
+                *block = Some(mapping_index);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_device(&self, mapping_index: usize) -> Result<&dyn MappedDevice, String> {
+        if mapping_index >= self.mappings.len() {
+            return Err(format!("Index {} is out-of-bounds", mapping_index));
+        }
+
+        Ok(self.mappings[mapping_index].device.as_ref())
+    }
+
+    pub fn get_device_mut(&mut self, mapping_index: usize) -> Result<&mut dyn MappedDevice, String> {
+        if mapping_index >= self.mappings.len() {
+            return Err(format!("Index {} is out-of-bounds", mapping_index));
+        }
+
+        Ok(self.mappings[mapping_index].device.as_mut())
     }
 
     pub fn read_8(&self, address: usize) -> u8 {
@@ -120,15 +131,17 @@ impl<'memcontrol> MemoryController<'memcontrol> {
     }
 }
 
-struct Mapping<'mapping> {
-    device: &'mapping mut dyn MappedDevice,
+struct Mapping {
     offset: usize,
+    device: Box<dyn MappedDevice>,
 }
 
 pub trait MappedDevice {
+    fn peek_bytes(&mut self, address: usize, count: usize) -> &[u8];
+    fn poke_bytes(&mut self, address: usize, bytes: &[u8]);
+    fn size(&self) -> usize;
     fn read_8(&self, address: usize) -> u8;
     fn read_16(&self, address: usize) -> u16;
-    fn size(&self) -> usize;
     fn write_8(&mut self, address: usize, value: u8);
     fn write_16(&mut self, address: usize, value: u16);
     fn reset(&mut self);
@@ -145,22 +158,26 @@ impl RAM {
         }
     }
 
-    pub fn read_bytes(&mut self, address: usize, count: usize) -> &[u8] {
-        &self.memory[address..address + count]
-    }
-
-    pub fn write_bytes(&mut self, address: usize, bytes: &[u8]) {
-        for (i, byte) in bytes.iter().enumerate() {
-            self.memory[address + i] = *byte;
-        }
-    }
-
     pub fn fill(&mut self, value: u8) {
         self.memory.fill(value);
     }
 }
 
 impl MappedDevice for RAM {
+    fn peek_bytes(&mut self, address: usize, count: usize) -> &[u8] {
+        &self.memory[address..address + count]
+    }
+
+    fn poke_bytes(&mut self, address: usize, bytes: &[u8]) {
+        for (i, byte) in bytes.iter().enumerate() {
+            self.memory[address + i] = *byte;
+        }
+    }
+
+    fn size(&self) -> usize {
+        self.memory.len()
+    }
+
     fn read_8(&self, address: usize) -> u8 {
         if address >= self.memory.len() {
             return 0x00;
@@ -179,10 +196,6 @@ impl MappedDevice for RAM {
         }
 
         value
-    }
-
-    fn size(&self) -> usize {
-        self.memory.len()
     }
 
     fn write_8(&mut self, address: usize, value: u8) {
@@ -217,22 +230,26 @@ impl ROM {
         }
     }
 
-    pub fn read_bytes(&mut self, address: usize, count: usize) -> &[u8] {
-        &self.memory[address..address + count]
-    }
-
-    pub fn write_bytes(&mut self, address: usize, bytes: &[u8]) {
-        for (i, byte) in bytes.iter().enumerate() {
-            self.memory[address + i] = *byte;
-        }
-    }
-
     pub fn fill(&mut self, value: u8) {
         self.memory.fill(value);
     }
 }
 
 impl MappedDevice for ROM {
+    fn peek_bytes(&mut self, address: usize, count: usize) -> &[u8] {
+        &self.memory[address..address + count]
+    }
+
+    fn poke_bytes(&mut self, address: usize, bytes: &[u8]) {
+        for (i, byte) in bytes.iter().enumerate() {
+            self.memory[address + i] = *byte;
+        }
+    }
+
+    fn size(&self) -> usize {
+        self.memory.len()
+    }
+
     fn read_8(&self, address: usize) -> u8 {
         if address >= self.memory.len() {
             return 0x00;
@@ -251,10 +268,6 @@ impl MappedDevice for ROM {
         }
 
         value
-    }
-
-    fn size(&self) -> usize {
-        self.memory.len()
     }
 
     fn write_8(&mut self, _: usize, _: u8) {}
