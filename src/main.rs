@@ -28,5 +28,5 @@ fn main() {
 
     cpu.reset();
 
-    println!("Instruction pointer after reset: 0x{:04X}", cpu.instruction_pointer);
+    println!("Program counter after reset: 0x{:04X}", cpu.program_counter);
 }
