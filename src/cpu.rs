@@ -33,6 +33,12 @@ impl CPU {
             0x00 => { // LDA IMM
                 self.accumulator = self.fetch();
             },
+            0xF0 => { // HLT
+                self.program_counter -= 1;
+            },
+            0xF1 => { // RST
+                self.reset();
+            },
             _ => () // NOP
         }
     }
