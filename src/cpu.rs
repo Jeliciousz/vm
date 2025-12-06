@@ -27,4 +27,19 @@ impl CPU {
         self.accumulator = 0x00;
         self.status = 0b00000000;
     }
+
+    pub fn step(&mut self) {
+        match self.fetch() {
+            0x00 => { // LDA IMM
+                self.accumulator = self.fetch();
+            },
+            _ => () // NOP
+        }
+    }
+
+    fn fetch(&mut self) -> u8 {
+        let fetched_value = self.memory_controller.read_8(self.program_counter as usize);
+        self.program_counter += 1;
+        fetched_value
+    }
 }
