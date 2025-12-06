@@ -26,14 +26,12 @@ fn main() {
     let high_byte = (ROM_FIRST_ADDRESS >> 8) as u8;
 
     rom.poke_bytes(cpu::RESET_VECTOR - ROM_FIRST_ADDRESS, &[low_byte, high_byte]);
-    rom.poke_bytes(0x0000, &[0x00, 0x80, 0xF0]);
+    rom.poke_bytes(0x0000, &[0x00, 0x80]);
 
     cpu.reset();
 
     println!("Program counter after reset: 0x{:04X}", cpu.program_counter);
-    
-    loop {
-        cpu.step();
-        println!("Accumulator after step: 0x{:02X}", cpu.accumulator);
-    }
+
+    cpu.step();
+    println!("Accumulator after step: 0x{:02X}", cpu.accumulator);
 }
