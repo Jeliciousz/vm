@@ -1,6 +1,5 @@
 use crate::memory::MemoryController;
 
-pub const DATA_BUS_WIDTH: u32 = 8;
 pub const ADDRESS_BUS_WIDTH: u32 = 16;
 pub const RESET_VECTOR: usize = 0xFFFE;
 
