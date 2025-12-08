@@ -7,8 +7,13 @@ pub const RESET_VECTOR: usize = 0xFFFE;
 pub struct CPU {
     pub memory_controller: MemoryController,
     pub program_counter: u16,
-    pub accumulator: u8,
+    pub stack_pointer: u16,
+    pub index: u16,
     pub status: u8,
+    pub accumulator: u8,
+    pub b: u8,
+    pub c: u8,
+    pub d: u8,
 }
 
 impl CPU {
@@ -16,16 +21,26 @@ impl CPU {
         Self {
             memory_controller: MemoryController::new(),
             program_counter: 0x0000,
-            accumulator: 0x00,
+            stack_pointer: 0x0000,
+            index: 0x0000,
             status: 0b00000000,
+            accumulator: 0x00,
+            b: 0x00,
+            c: 0x00,
+            d: 0x00,
         }
     }
 
     pub fn reset(&mut self) {
         self.memory_controller.reset();
         self.program_counter = self.memory_controller.read_16(RESET_VECTOR);
-        self.accumulator = 0x00;
+        self.stack_pointer = 0x0000;
+        self.index = 0x0000;
         self.status = 0b00000000;
+        self.accumulator = 0x00;
+        self.b = 0x00;
+        self.c = 0x00;
+        self.d = 0x00;
     }
 
     pub fn step(&mut self) {
