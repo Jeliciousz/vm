@@ -1,14 +1,15 @@
 use crate::memory::MemoryController;
 
 pub const ADDRESS_BUS_WIDTH: u32 = 16;
-pub const RESET_VECTOR: usize = 0xFFFE;
+pub const RESET_VECTOR: usize = 0xFFFC;
+pub const NMI_VECTOR: usize = 0xFFFE;
 
 pub struct CPU {
     pub memory_controller: MemoryController,
     pub program_counter: u16,
     pub stack_pointer: u16,
     pub index: u16,
-    pub status: u8,
+    pub status: u8,     // ionzc
     pub accumulator: u8,
     pub b: u8,
     pub c: u8,
