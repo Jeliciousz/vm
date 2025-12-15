@@ -777,7 +777,6 @@ impl CPU {
                 
                 self.memory_controller.read16(source_address)
             },
-            _ => 0
         };
 
         match destination {
@@ -863,7 +862,6 @@ impl CPU {
 
                 self.memory_controller.write16(destination_address, result);
             },
-            _ => ()
         }
     }
 
@@ -1078,7 +1076,6 @@ impl CPU {
 
                 self.memory_controller.write8(destination_address, result);
             },
-            _ => ()
         }
     }
 }
