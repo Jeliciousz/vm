@@ -28,26 +28,6 @@ impl Operation {
     }
 }
 
-#[derive(PartialEq)]
-enum OpMode {
-    Word,
-    LowByte,
-    HighByte,
-}
-
-impl OpMode {
-    fn get_op_mode_from_instruction(instruction: u16) -> Self {
-        let mode = (instruction & 0x00C0) >> 6;
-
-        match mode {
-            0b00 | 0b10 => Self::Word,
-            0b01 => Self::LowByte,
-            0b11 => Self::HighByte,
-            _ => panic!("Tried to get op mode from {}", mode),
-        }
-    }
-}
-
 enum Location {
     Immediate,
     A,
