@@ -39,7 +39,7 @@ impl CPU {
         self.stack_pointer = 0x0000;
         self.index_x = 0x0000;
         self.index_y = 0x0000;
-        self.status = 0b0000_0000;
+        self.status = 0b0000_0100;
         self.accumulator = 0x0000;
         self.b = 0x0000;
         self.c = 0x0000;
