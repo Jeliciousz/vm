@@ -26,34 +26,25 @@ fn main() {
     let high_byte = (ROM_FIRST_ADDRESS >> 8) as u8;
 
     rom.poke_bytes(cpu::RESET_VECTOR - ROM_FIRST_ADDRESS, &[low_byte, high_byte]);
-    rom.poke_bytes(0x0000, &[0x80, 0x10, 0x80, 0x80, 0x20, 0x08, 0x01, 0x12]);
+    rom.poke_bytes(0x0000, &[0x80, 0x10, 0x80, 0x80, 0x20, 0x80, 0x81, 0x12]);
 
     cpu.reset();
 
-    println!("Program counter after reset: 0x{:04X}", cpu.program_counter);
-    println!("Accumulator after reset: 0x{:04X}", cpu.accumulator);
-    println!("B after reset: 0x{:04X}", cpu.b);
-    println!("Flags after reset: 0b{:08b}", cpu.status);
-    println!();
+    println!("Reset!");
+    cpu.print_state();
 
     cpu.step();
-    println!("Program counter after step: 0x{:04X}", cpu.program_counter);
-    println!("Accumulator after step: 0x{:04X}", cpu.accumulator);
-    println!("B after step: 0x{:04X}", cpu.b);
-    println!("Flags after step: 0b{:08b}", cpu.status);
-    println!();
+
+    println!("Mov8 A, 0x80");
+    cpu.print_state();
 
     cpu.step();
-    println!("Program counter after step: 0x{:04X}", cpu.program_counter);
-    println!("Accumulator after step: 0x{:04X}", cpu.accumulator);
-    println!("B after step: 0x{:04X}", cpu.b);
-    println!("Flags after step: 0b{:08b}", cpu.status);
-    println!();
+
+    println!("Mov8 B, 0x80");
+    cpu.print_state();
 
     cpu.step();
-    println!("Program counter after step: 0x{:04X}", cpu.program_counter);
-    println!("Accumulator after step: 0x{:04X}", cpu.accumulator);
-    println!("B after step: 0x{:04X}", cpu.b);
-    println!("Flags after step: 0b{:08b}", cpu.status);
-    println!();
+
+    println!("Adc8 A, B");
+    cpu.print_state();
 }
