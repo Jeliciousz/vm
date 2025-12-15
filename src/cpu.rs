@@ -46,6 +46,18 @@ impl CPU {
         self.d = 0x0000;
     }
 
+    pub fn print_state(&self) {
+        println!("PC: 0x{:04X}", self.program_counter);
+        println!("SP: 0x{:04X}", self.stack_pointer);
+        println!("IDX: 0x{:04X}", self.index_x);
+        println!("IDY: 0x{:04X}", self.index_y);
+        println!("FLG: 0b{:08b}", self.status);
+        println!("A: 0x{:04X}", self.accumulator);
+        println!("B: 0x{:04X}", self.b);
+        println!("C: 0x{:04X}", self.c);
+        println!("D: 0x{:04X}", self.d);
+    }
+
     pub fn step(&mut self) {
         let fetched_instruction = self.fetch16();
 
