@@ -169,6 +169,8 @@ impl CPU {
             if nmi {
                 self.waiting_for_interrupt = false;
 
+                self.set_interrupt_disable_flag(true);
+
                 self.program_counter = self.memory_controller.read16(NMI_VECTOR);
             }
 
@@ -178,6 +180,8 @@ impl CPU {
                 if self.get_interrupt_disable_flag() {
                     return;
                 }
+
+                self.set_interrupt_disable_flag(true);
 
                 self.program_counter = self.memory_controller.read16(self.memory_controller.read16(IRQ_VECTOR) as usize + (irq_code as usize * 2));
             }
