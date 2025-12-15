@@ -26,7 +26,7 @@ fn main() {
     let high_byte = (ROM_FIRST_ADDRESS >> 8) as u8;
 
     rom.poke_bytes(cpu::RESET_VECTOR - ROM_FIRST_ADDRESS, &[low_byte, high_byte]);
-    rom.poke_bytes(0x0000, &[0x80, 0x10, 0x80, 0x80, 0x20, 0x80, 0x81, 0x12]);
+    rom.poke_bytes(0x0000, &[0x80, 0x10, 0x80, 0x80, 0x20, 0x08, 0x81, 0x12]);
 
     cpu.reset();
 
@@ -40,7 +40,7 @@ fn main() {
 
     cpu.step();
 
-    println!("Mov8 B, 0x80");
+    println!("Mov8 B, 0x08");
     cpu.print_state();
 
     cpu.step();
