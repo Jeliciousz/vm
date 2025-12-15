@@ -80,45 +80,45 @@ impl MemoryController {
         Ok(self.mappings[mapping_index].device.as_mut())
     }
 
-    pub fn read_8(&self, address: usize) -> u8 {
+    pub fn read8(&self, address: usize) -> u8 {
         match self.blocks[address / MAP_BLOCK_SIZE] {
             Some(mapping_index) => {
                 let translated_address = address - self.mappings[mapping_index].offset;
 
-                self.mappings[mapping_index].device.read_8(translated_address)
+                self.mappings[mapping_index].device.read8(translated_address)
             },
             None => 0x00,
         }
     }
 
-    pub fn read_16(&self, address: usize) -> u16 {
+    pub fn read16(&self, address: usize) -> u16 {
         match self.blocks[address / MAP_BLOCK_SIZE] {
             Some(mapping_index) => {
                 let translated_address = address - self.mappings[mapping_index].offset;
                 
-                self.mappings[mapping_index].device.read_16(translated_address)
+                self.mappings[mapping_index].device.read16(translated_address)
             },
             None => 0x00,
         }
     }
 
-    pub fn write_8(&mut self, address: usize, value: u8) {
+    pub fn write8(&mut self, address: usize, value: u8) {
         match self.blocks[address / MAP_BLOCK_SIZE] {
             Some(mapping_index) => {
                 let translated_address = address - self.mappings[mapping_index].offset;
                 
-                self.mappings[mapping_index].device.write_8(translated_address, value)
+                self.mappings[mapping_index].device.write8(translated_address, value)
             },
             None => (),
         }
     }
 
-    pub fn write_16(&mut self, address: usize, value: u16) {
+    pub fn write16(&mut self, address: usize, value: u16) {
         match self.blocks[address / MAP_BLOCK_SIZE] {
             Some(mapping_index) => {
                 let translated_address = address - self.mappings[mapping_index].offset;
                 
-                self.mappings[mapping_index].device.write_16(translated_address, value)
+                self.mappings[mapping_index].device.write16(translated_address, value)
             },
             None => (),
         }
@@ -140,10 +140,10 @@ pub trait MappedDevice {
     fn peek_bytes(&mut self, address: usize, count: usize) -> &[u8];
     fn poke_bytes(&mut self, address: usize, bytes: &[u8]);
     fn size(&self) -> usize;
-    fn read_8(&self, address: usize) -> u8;
-    fn read_16(&self, address: usize) -> u16;
-    fn write_8(&mut self, address: usize, value: u8);
-    fn write_16(&mut self, address: usize, value: u16);
+    fn read8(&self, address: usize) -> u8;
+    fn read16(&self, address: usize) -> u16;
+    fn write8(&mut self, address: usize, value: u8);
+    fn write16(&mut self, address: usize, value: u16);
     fn reset(&mut self);
 }
 
@@ -178,14 +178,14 @@ impl MappedDevice for RAM {
         self.memory.len()
     }
 
-    fn read_8(&self, address: usize) -> u8 {
+    fn read8(&self, address: usize) -> u8 {
         if address >= self.memory.len() {
             return 0x00;
         }
         self.memory[address]
     }
 
-    fn read_16(&self, address: usize) -> u16 {
+    fn read16(&self, address: usize) -> u16 {
         let mut value: u16 = 0x0000;
 
         if address < self.memory.len() {
@@ -198,14 +198,14 @@ impl MappedDevice for RAM {
         value
     }
 
-    fn write_8(&mut self, address: usize, value: u8) {
+    fn write8(&mut self, address: usize, value: u8) {
         if address >= self.memory.len() {
             return;
         }
         self.memory[address] = value;
     }
 
-    fn write_16(&mut self, address: usize, value: u16) {
+    fn write16(&mut self, address: usize, value: u16) {
         if address < self.memory.len() {
             self.memory[address] = value as u8;
         }
@@ -250,14 +250,14 @@ impl MappedDevice for ROM {
         self.memory.len()
     }
 
-    fn read_8(&self, address: usize) -> u8 {
+    fn read8(&self, address: usize) -> u8 {
         if address >= self.memory.len() {
             return 0x00;
         }
         self.memory[address]
     }
 
-    fn read_16(&self, address: usize) -> u16 {
+    fn read16(&self, address: usize) -> u16 {
         let mut value: u16 = 0x0000;
 
         if address < self.memory.len() {
@@ -270,7 +270,7 @@ impl MappedDevice for ROM {
         value
     }
 
-    fn write_8(&mut self, _: usize, _: u8) {}
-    fn write_16(&mut self, _: usize, _: u16) {}
+    fn write8(&mut self, _: usize, _: u8) {}
+    fn write16(&mut self, _: usize, _: u16) {}
     fn reset(&mut self) {}
 }
