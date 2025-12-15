@@ -3,14 +3,15 @@ use core::panic;
 use crate::memory::MemoryController;
 
 pub const ADDRESS_BUS_WIDTH: u32 = 16;
-pub const RESET_VECTOR: usize = 0xFFFC;
-pub const NMI_VECTOR: usize = 0xFFFE;
+pub const RESET_VECTOR: usize = 0xFFFE;
+pub const NMI_VECTOR: usize = 0xFFFC;
+pub const IRQ_VECTOR: usize = 0xFFFA;
 
 enum Operation {
     Mov,
     Adc,
     Sbc,
-    Hlt,
+    Stp,
     Rst,
     Nop,
 }
@@ -23,7 +24,7 @@ impl Operation {
             0x00 => Self::Mov,
             0x01 => Self::Adc,
             0x02 => Self::Sbc,
-            0x30 => Self::Hlt,
+            0x30 => Self::Stp,
             0x31 => Self::Rst,
             _ => Self::Nop,
         }
@@ -100,6 +101,8 @@ impl Location {
 }
 
 pub struct CPU {
+    pub enable: bool,
+    pub waiting_for_interrupt: bool,
     pub memory_controller: MemoryController,
     pub program_counter: u16,
     pub stack_pointer: u16,
@@ -115,6 +118,8 @@ pub struct CPU {
 impl CPU {
     pub fn new() -> Self {
         Self {
+            enable: false,
+            waiting_for_interrupt: false,
             memory_controller: MemoryController::new(),
             program_counter: 0x0000,
             stack_pointer: 0x0000,
@@ -129,12 +134,14 @@ impl CPU {
     }
 
     pub fn reset(&mut self) {
+        self.enable = true;
+        self.waiting_for_interrupt = false;
         self.memory_controller.reset();
         self.program_counter = self.memory_controller.read16(RESET_VECTOR);
         self.stack_pointer = 0x0000;
         self.index_x = 0x0000;
         self.index_y = 0x0000;
-        self.status = 0b0000_0100;
+        self.status = 0b0000_0000;
         self.a = 0x0000;
         self.b = 0x0000;
         self.c = 0x0000;
@@ -153,7 +160,31 @@ impl CPU {
         println!("D: 0x{:04X}", self.d);
     }
 
-    pub fn step(&mut self) {
+    pub fn process(&mut self, nmi: bool, irq: Option<u8>) {
+        if !self.enable {
+            return;
+        }
+
+        if self.waiting_for_interrupt {
+            if nmi {
+                self.waiting_for_interrupt = false;
+
+                self.program_counter == self.memory_controller.read16(NMI_VECTOR);
+            }
+
+            if let Some(irq_code) = irq {
+                self.waiting_for_interrupt = false;
+
+                if self.get_interrupt_disable_flag() {
+                    return;
+                }
+
+                self.program_counter == self.memory_controller.read16(self.memory_controller.read16(IRQ_VECTOR) as usize + (irq_code as usize * 2));
+            }
+
+            return;
+        }
+
         let instruction = self.fetch16();
 
         let operation = Operation::get_operation_from_instruction(instruction);
@@ -184,8 +215,8 @@ impl CPU {
                     self.execute_sbc16(destination, source);
                 }
             },
-            Operation::Hlt => {
-                self.program_counter -= 2;
+            Operation::Stp => {
+                self.enable = false;
             },
             Operation::Rst => {
                 self.reset();
@@ -268,7 +299,7 @@ impl CPU {
         self.status & 0x08 != 0
     }
 
-    fn get_interrupt_enable_flag(&self) -> bool {
+    fn get_interrupt_disable_flag(&self) -> bool {
         self.status & 0x04 != 0
     }
 
@@ -312,7 +343,7 @@ impl CPU {
         }
     }
 
-    fn set_interrupt_enable_flag(&mut self, flag: bool) {
+    fn set_interrupt_disable_flag(&mut self, flag: bool) {
         if flag {
             self.status |= 0x04;
         } else {

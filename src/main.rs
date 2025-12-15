@@ -34,19 +34,19 @@ fn main() {
     cpu.print_state();
     println!();
 
-    cpu.step();
+    cpu.process(false, None);
 
     println!("Mov AL, 0x80\n");
     cpu.print_state();
     println!();
 
-    cpu.step();
+    cpu.process(false, None);
 
     println!("Mov BL, 0x08\n");
     cpu.print_state();
     println!();
 
-    cpu.step();
+    cpu.process(false, None);
 
     println!("Adc AL, BL\n");
     cpu.print_state();
