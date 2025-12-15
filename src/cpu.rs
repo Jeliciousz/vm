@@ -1,8 +1,121 @@
+use core::panic;
+
 use crate::memory::MemoryController;
 
 pub const ADDRESS_BUS_WIDTH: u32 = 16;
 pub const RESET_VECTOR: usize = 0xFFFC;
 pub const NMI_VECTOR: usize = 0xFFFE;
+
+enum Operation {
+    Mov,
+    Adc,
+    Hlt,
+    Rst,
+    Nop,
+}
+
+impl Operation {
+    fn get_operation_from_instruction(instruction: u16) -> Self {
+        let operation = instruction & 0x003F;
+
+        match operation {
+            0x00 => Self::Mov,
+            0x01 => Self::Adc,
+            0x30 => Self::Hlt,
+            0x31 => Self::Rst,
+            _ => Self::Nop
+        }
+    }
+}
+
+#[derive(PartialEq)]
+enum OpMode {
+    Word,
+    LowByte,
+    HighByte,
+}
+
+impl OpMode {
+    fn get_op_mode_from_instruction(instruction: u16) -> Self {
+        let mode = (instruction & 0x00C0) >> 6;
+
+        match mode {
+            0b00 | 0b10 => Self::Word,
+            0b01 => Self::LowByte,
+            0b11 => Self::HighByte,
+            _ => panic!("Tried to get op mode from {}", mode),
+        }
+    }
+}
+
+enum Location {
+    Immediate,
+    A,
+    B,
+    C,
+    D,
+    Idx,
+    Idy,
+    Address,
+    IndexedAddress,
+    IndirectAddress,
+    IndirectIndexedAddress,
+    IndexedIndirectAddress,
+    IndexedPointer,
+    IndirectPointer,
+    IndirectIndexedPointer,
+    IndexedIndirectPointer,
+}
+
+impl Location {
+    fn get_destination_from_instruction(instruction: u16) -> Self {
+        let destination = (instruction & 0xF000) >> 12;
+
+        match destination {
+            0x0 => Self::Immediate,
+            0x1 => Self::A,
+            0x2 => Self::B,
+            0x3 => Self::C,
+            0x4 => Self::D,
+            0x5 => Self::Idx,
+            0x6 => Self::Idy,
+            0x7 => Self::Address,
+            0x8 => Self::IndexedAddress,
+            0x9 => Self::IndirectAddress,
+            0xA => Self::IndirectIndexedAddress,
+            0xB => Self::IndexedIndirectAddress,
+            0xC => Self::IndexedPointer,
+            0xD => Self::IndirectPointer,
+            0xE => Self::IndirectIndexedPointer,
+            0xF => Self::IndexedIndirectPointer,
+            _ => panic!("Tried to get desitination from {}", destination),
+        }
+    }
+
+    fn get_source_from_instruction(instruction: u16) -> Self {
+        let source = (instruction & 0xF000) >> 12;
+
+        match source {
+            0x0 => Self::Immediate,
+            0x1 => Self::A,
+            0x2 => Self::B,
+            0x3 => Self::C,
+            0x4 => Self::D,
+            0x5 => Self::Idx,
+            0x6 => Self::Idy,
+            0x7 => Self::Address,
+            0x8 => Self::IndexedAddress,
+            0x9 => Self::IndirectAddress,
+            0xA => Self::IndirectIndexedAddress,
+            0xB => Self::IndexedIndirectAddress,
+            0xC => Self::IndexedPointer,
+            0xD => Self::IndirectPointer,
+            0xE => Self::IndirectIndexedPointer,
+            0xF => Self::IndexedIndirectPointer,
+            _ => panic!("Tried to get source from {}", source),
+        }
+    }
+}
 
 pub struct CPU {
     pub memory_controller: MemoryController,
@@ -59,35 +172,36 @@ impl CPU {
     }
 
     pub fn step(&mut self) {
-        let fetched_instruction = self.fetch16();
+        let instruction = self.fetch16();
 
-        let operation = (fetched_instruction & 0x007F) as u8;
-        let byte_mode = (fetched_instruction & 0x0080) >> 7 != 0;
-        let destination = ((fetched_instruction & 0xF000) >> 12) as u8;
-        let source = ((fetched_instruction & 0x0F00) >> 8) as u8;
+        let operation = Operation::get_operation_from_instruction(instruction);
+        let byte_mode = (instruction & 0x0040) != 0;
+        let lo_hi = (instruction & 0x0080) != 0;
+        let destination = Location::get_destination_from_instruction(instruction);
+        let source = Location::get_source_from_instruction(instruction);
 
         match operation {
-            0x00 => { // MOV
+            Operation::Mov => {
                 if byte_mode {
-                    self.execute_mov8(destination, source);
+                    self.execute_mov8(lo_hi, destination, source);
                 } else {
                     self.execute_mov16(destination, source);
                 }
             },
-            0x01 => { // ADC
+            Operation::Adc => {
                 if byte_mode {
-                    self.execute_adc8(destination, source);
+                    self.execute_adc8(lo_hi, destination, source);
                 } else {
                     self.execute_adc16(destination, source);
                 }
             },
-            0x70 => { // HLT
+            Operation::Hlt => {
                 self.program_counter -= 2;
             },
-            0x71 => { // RST
+            Operation::Rst => {
                 self.reset();
             },
-            _ => () // NOP (not more than 128 operations)
+            Operation::Nop => (),
         }
     }
 
@@ -229,28 +343,52 @@ impl CPU {
         self.set_parity_flag(value.count_ones() % 2 == 0);
     }
 
-    fn set_accumulator8(&mut self, value: u8) {
+    fn set_al(&mut self, value: u8) {
         self.accumulator = self.accumulator & 0xFF00 | value as u16;
     }
 
-    fn set_b8(&mut self, value: u8) {
+    fn set_ah(&mut self, value: u8) {
+        self.accumulator = self.accumulator & 0x00FF | (value as u16) << 8;
+    }
+
+    fn set_bl(&mut self, value: u8) {
         self.b = self.b & 0xFF00 | value as u16;
     }
 
-    fn set_c8(&mut self, value: u8) {
+    fn set_bh(&mut self, value: u8) {
+        self.b = self.b & 0x00FF | (value as u16) << 8;
+    }
+
+    fn set_cl(&mut self, value: u8) {
         self.c = self.c & 0xFF00 | value as u16;
     }
 
-    fn set_d8(&mut self, value: u8) {
+    fn set_ch(&mut self, value: u8) {
+        self.c = self.c & 0x00FF | (value as u16) << 8;
+    }
+
+    fn set_dl(&mut self, value: u8) {
         self.d = self.d & 0xFF00 | value as u16;
     }
 
-    fn set_index_x8(&mut self, value: u8) {
+    fn set_dh(&mut self, value: u8) {
+        self.d = self.d & 0x00FF | (value as u16) << 8;
+    }
+
+    fn set_idxl(&mut self, value: u8) {
         self.index_x = self.index_x & 0xFF00 | value as u16;
     }
 
-    fn set_index_y8(&mut self, value: u8) {
+    fn set_idxh(&mut self, value: u8) {
+        self.index_x = self.index_x & 0x00FF | (value as u16) << 8;
+    }
+
+    fn set_idyl(&mut self, value: u8) {
         self.index_y = self.index_y & 0xFF00 | value as u16;
+    }
+
+    fn set_idyh(&mut self, value: u8) {
+        self.index_y = self.index_y & 0x00FF | (value as u16) << 8;
     }
 
     fn add_with_carry16(&mut self, lhs: u16, rhs: u16, carry: bool) -> u16 {
@@ -273,312 +411,368 @@ impl CPU {
         result
     }
 
-    fn execute_mov16(&mut self, destination: u8, source: u8) {
+    fn execute_mov16(&mut self, destination: Location, source: Location) {
         let source_value = match source {
-            0x0 => self.fetch16(),
-            0x1 => self.accumulator,
-            0x2 => self.b,
-            0x3 => self.c,
-            0x4 => self.d,
-            0x5 => self.index_x,
-            0x6 => self.index_y,
-            0x7 => { // ADDR
+            Location::Immediate => self.fetch16(),
+            Location::A => self.accumulator,
+            Location::B => self.b,
+            Location::C => self.c,
+            Location::D => self.d,
+            Location::Idx => self.index_x,
+            Location::Idy => self.index_y,
+            Location::Address => {
                 let source_address = self.fetch_address();
 
                 self.memory_controller.read16(source_address)
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let source_address = self.fetch_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let source_address = self.fetch_indirect_address();
 
                 self.memory_controller.read16(source_address)
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let source_address = self.fetch_indirect_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let source_address = self.fetch_indexed_indirect_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xC => { // IDY,IDX
+            Location::IndexedPointer => {
                 let source_address = self.get_pointer_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xD => { // (IDY)
+            Location::IndirectPointer => {
                 let source_address = self.get_pointer_indirect_address();
 
                 self.memory_controller.read16(source_address)
             },
-            0xE => { // (IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let source_address = self.get_pointer_indirect_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xF => { // (IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let source_address = self.get_pointer_indexed_indirect_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            _ => 0
         };
 
         self.set_flags_from_value16(source_value);
 
         match destination {
-            0x0 => (), // IMM (NOP)
-            0x1 => { // A
+            Location::Immediate => (), // NOP
+            Location::A => {
                 self.accumulator = source_value;
             },
-            0x2 => { // B
+            Location::B => {
                 self.b = source_value;
             },
-            0x3 => { // C
+            Location::C => {
                 self.c = source_value;
             },
-            0x4 => { // D
+            Location::D => {
                 self.d = source_value;
             },
-            0x5 => { // IDX
+            Location::Idx => {
                 self.index_x = source_value;
             },
-            0x6 => { // IDY
+            Location::Idy => {
                 self.index_y = source_value;
             },
-            0x7 => { // ADDR
+            Location::Address => {
                 let destination_address = self.fetch_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let destination_address = self.fetch_indexed_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let destination_address = self.fetch_indirect_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let destination_address = self.fetch_indirect_indexed_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let destination_address = self.fetch_indexed_indirect_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0xC => { // *IDY,IDX
+            Location::IndexedPointer => {
                 let destination_address = self.get_pointer_indexed_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0xD => { // (*IDY)
+            Location::IndirectPointer => {
                 let destination_address = self.get_pointer_indirect_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0xE => { // (*IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let destination_address = self.get_pointer_indirect_indexed_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            0xF => { // (*IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let destination_address = self.get_pointer_indexed_indirect_address();
 
                 self.memory_controller.write16(destination_address, source_value);
             },
-            _ => ()
         }
     }
 
-    fn execute_mov8(&mut self, destination: u8, source: u8) {
+    fn execute_mov8(&mut self, lo_hi: bool, destination: Location, source: Location) {
         let source_value = match source {
-            0x0 => self.fetch8(),
-            0x1 => self.accumulator as u8,
-            0x2 => self.b as u8,
-            0x3 => self.c as u8,
-            0x4 => self.d as u8,
-            0x5 => self.index_x as u8,
-            0x6 => self.index_y as u8,
-            0x7 => { // ADDR
+            Location::Immediate => self.fetch8(),
+            Location::A => {
+                if lo_hi {
+                    (self.accumulator >> 8) as u8
+                } else {
+                    self.accumulator as u8
+                }
+            },
+            Location::B => {
+                if lo_hi {
+                    (self.b >> 8) as u8
+                } else {
+                    self.b as u8
+                }
+            },
+            Location::C => {
+                if lo_hi {
+                    (self.c >> 8) as u8
+                } else {
+                    self.c as u8
+                }
+            },
+            Location::D => {
+                if lo_hi {
+                    (self.d >> 8) as u8
+                } else {
+                    self.d as u8
+                }
+            },
+            Location::Idx => {
+                if lo_hi {
+                    (self.index_x >> 8) as u8
+                } else {
+                    self.index_x as u8
+                }
+            },
+            Location::Idy => {
+                if lo_hi {
+                    (self.index_y >> 8) as u8
+                } else {
+                    self.index_y as u8
+                }
+            },
+            Location::Address => {
                 let source_address = self.fetch_address();
 
                 self.memory_controller.read8(source_address)
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let source_address = self.fetch_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let source_address = self.fetch_indirect_address();
 
                 self.memory_controller.read8(source_address)
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let source_address = self.fetch_indirect_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let source_address = self.fetch_indexed_indirect_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xC => { // IDY,IDX
+            Location::IndexedPointer => {
                 let source_address = self.get_pointer_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xD => { // (IDY)
+            Location::IndirectPointer => {
                 let source_address = self.get_pointer_indirect_address();
 
                 self.memory_controller.read8(source_address)
             },
-            0xE => { // (IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let source_address = self.get_pointer_indirect_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xF => { // (IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let source_address = self.get_pointer_indexed_indirect_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            _ => 0
         };
 
         self.set_flags_from_value8(source_value);
 
         match destination {
-            0x0 => (), // IMM (NOP)
-            0x1 => { // A
-                self.set_accumulator8(source_value);
+            Location::Immediate => (), // NOP
+            Location::A => {
+                if lo_hi {
+                    self.set_ah(source_value);
+                } else {
+                    self.set_al(source_value);
+                }
             },
-            0x2 => { // B
-                self.set_b8(source_value);
+            Location::B => {
+                if lo_hi {
+                    self.set_bh(source_value);
+                } else {
+                    self.set_bl(source_value);
+                }
             },
-            0x3 => { // C
-                self.set_c8(source_value);
+            Location::C => {
+                if lo_hi {
+                    self.set_ch(source_value);
+                } else {
+                    self.set_cl(source_value);
+                }
             },
-            0x4 => { // D
-                self.set_d8(source_value);
+            Location::D => {
+                if lo_hi {
+                    self.set_dh(source_value);
+                } else {
+                    self.set_dl(source_value);
+                }
             },
-            0x5 => { // IDX
-                self.set_index_x8(source_value);
+            Location::Idx => {
+                if lo_hi {
+                    self.set_idxh(source_value);
+                } else {
+                    self.set_idxl(source_value);
+                }
             },
-            0x6 => { // IDY
-                self.set_index_y8(source_value);
+            Location::Idy => {
+                if lo_hi {
+                    self.set_idyh(source_value);
+                } else {
+                    self.set_idyl(source_value);
+                }
             },
-            0x7 => { // ADDR
+            Location::Address => {
                 let destination_address = self.fetch_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let destination_address = self.fetch_indexed_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let destination_address = self.fetch_indirect_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let destination_address = self.fetch_indirect_indexed_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let destination_address = self.fetch_indexed_indirect_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0xC => { // *IDY,IDX
+            Location::IndexedPointer => {
                 let destination_address = self.get_pointer_indexed_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0xD => { // (*IDY)
+            Location::IndirectPointer => {
                 let destination_address = self.get_pointer_indirect_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0xE => { // (*IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let destination_address = self.get_pointer_indirect_indexed_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            0xF => { // (*IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let destination_address = self.get_pointer_indexed_indirect_address();
 
                 self.memory_controller.write8(destination_address, source_value);
             },
-            _ => ()
         }
     }
 
-    fn execute_adc16(&mut self, destination: u8, source: u8) {
+    fn execute_adc16(&mut self, destination: Location, source: Location) {
         let source_value = match source {
-            0x0 => self.fetch16(),
-            0x1 => self.accumulator,
-            0x2 => self.b,
-            0x3 => self.c,
-            0x4 => self.d,
-            0x5 => self.index_x,
-            0x6 => self.index_y,
-            0x7 => { // ADDR
+            Location::Immediate => self.fetch16(),
+            Location::A => self.accumulator,
+            Location::B => self.b,
+            Location::C => self.c,
+            Location::D => self.d,
+            Location::Idx => self.index_x,
+            Location::Idy => self.index_y,
+            Location::Address => {
                 let source_address = self.fetch_address();
 
                 self.memory_controller.read16(source_address)
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let source_address = self.fetch_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let source_address = self.fetch_indirect_address();
 
                 self.memory_controller.read16(source_address)
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let source_address = self.fetch_indirect_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let source_address = self.fetch_indexed_indirect_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xC => { // IDY,IDX
+            Location::IndexedPointer => {
                 let source_address = self.get_pointer_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xD => { // (IDY)
+            Location::IndirectPointer => {
                 let source_address = self.get_pointer_indirect_address();
 
                 self.memory_controller.read16(source_address)
             },
-            0xE => { // (IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let source_address = self.get_pointer_indirect_indexed_address();
                 
                 self.memory_controller.read16(source_address)
             },
-            0xF => { // (IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let source_address = self.get_pointer_indexed_indirect_address();
                 
                 self.memory_controller.read16(source_address)
@@ -587,82 +781,82 @@ impl CPU {
         };
 
         match destination {
-            0x0 => (), // IMM (NOP)
-            0x1 => { // A
+            Location::Immediate => (), // NOP
+            Location::A => {
                 self.accumulator = self.add_with_carry16(self.accumulator, source_value, self.get_carry_flag());
             },
-            0x2 => { // B
+            Location::B => {
                 self.b = self.add_with_carry16(self.b, source_value, self.get_carry_flag());
             },
-            0x3 => { // C
+            Location::C => {
                 self.c = self.add_with_carry16(self.c, source_value, self.get_carry_flag());
             },
-            0x4 => { // D
+            Location::D => {
                 self.d = self.add_with_carry16(self.d, source_value, self.get_carry_flag());
             },
-            0x5 => { // IDX
+            Location::Idx => {
                 self.index_x = self.add_with_carry16(self.index_x, source_value, self.get_carry_flag());
             },
-            0x6 => { // IDY
+            Location::Idy => {
                 self.index_y = self.add_with_carry16(self.index_y, source_value, self.get_carry_flag());
             },
-            0x7 => { // ADDR
+            Location::Address => {
                 let destination_address = self.fetch_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let destination_address = self.fetch_indexed_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let destination_address = self.fetch_indirect_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let destination_address = self.fetch_indirect_indexed_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let destination_address = self.fetch_indexed_indirect_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0xC => { // *IDY,IDX
+            Location::IndexedPointer => {
                 let destination_address = self.get_pointer_indexed_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0xD => { // (*IDY)
+            Location::IndirectPointer => {
                 let destination_address = self.get_pointer_indirect_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0xE => { // (*IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let destination_address = self.get_pointer_indirect_indexed_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write16(destination_address, result);
             },
-            0xF => { // (*IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let destination_address = self.get_pointer_indexed_indirect_address();
 
                 let result = self.add_with_carry16(self.memory_controller.read16(destination_address), source_value, self.get_carry_flag());
@@ -673,146 +867,211 @@ impl CPU {
         }
     }
 
-    fn execute_adc8(&mut self, destination: u8, source: u8) {
+    fn execute_adc8(&mut self, lo_hi: bool, destination: Location, source: Location) {
         let source_value = match source {
-            0x0 => self.fetch8(),
-            0x1 => self.accumulator as u8,
-            0x2 => self.b as u8,
-            0x3 => self.c as u8,
-            0x4 => self.d as u8,
-            0x5 => self.index_x as u8,
-            0x6 => self.index_y as u8,
-            0x7 => { // ADDR
+            Location::Immediate => self.fetch8(),
+            Location::A => {
+                if lo_hi {
+                    (self.accumulator >> 8) as u8
+                } else {
+                    self.accumulator as u8
+                }
+            },
+            Location::B => {
+                if lo_hi {
+                    (self.b >> 8) as u8
+                } else {
+                    self.b as u8
+                }
+            },
+            Location::C => {
+                if lo_hi {
+                    (self.c >> 8) as u8
+                } else {
+                    self.c as u8
+                }
+            },
+            Location::D => {
+                if lo_hi {
+                    (self.d >> 8) as u8
+                } else {
+                    self.d as u8
+                }
+            },
+            Location::Idx => {
+                if lo_hi {
+                    (self.index_x >> 8) as u8
+                } else {
+                    self.index_x as u8
+                }
+            },
+            Location::Idy => {
+                if lo_hi {
+                    (self.index_y >> 8) as u8
+                } else {
+                    self.index_y as u8
+                }
+            },
+            Location::Address => {
                 let source_address = self.fetch_address();
 
                 self.memory_controller.read8(source_address)
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let source_address = self.fetch_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let source_address = self.fetch_indirect_address();
 
                 self.memory_controller.read8(source_address)
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let source_address = self.fetch_indirect_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let source_address = self.fetch_indexed_indirect_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xC => { // IDY,IDX
+            Location::IndexedPointer => {
                 let source_address = self.get_pointer_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xD => { // (IDY)
+            Location::IndirectPointer => {
                 let source_address = self.get_pointer_indirect_address();
 
                 self.memory_controller.read8(source_address)
             },
-            0xE => { // (IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let source_address = self.get_pointer_indirect_indexed_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            0xF => { // (IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let source_address = self.get_pointer_indexed_indirect_address();
                 
                 self.memory_controller.read8(source_address)
             },
-            _ => 0
         };
 
         match destination {
-            0x0 => (), // IMM (NOP)
-            0x1 => { // A
+            Location::Immediate => (), // NOP
+            Location::A => {
                 let result = self.add_with_carry8(self.accumulator as u8, source_value, self.get_carry_flag());
-                self.set_accumulator8(result);
+
+                if lo_hi {
+                    self.set_ah(result);
+                } else {
+                    self.set_al(result);
+                }
             },
-            0x2 => { // B
+            Location::B => {
                 let result = self.add_with_carry8(self.b as u8, source_value, self.get_carry_flag());
-                self.set_b8(result);
+                
+                if lo_hi {
+                    self.set_bh(result);
+                } else {
+                    self.set_bl(result);
+                }
             },
-            0x3 => { // C
+            Location::C => {
                 let result = self.add_with_carry8(self.c as u8, source_value, self.get_carry_flag());
-                self.set_c8(result);
+                
+                if lo_hi {
+                    self.set_ch(result);
+                } else {
+                    self.set_cl(result);
+                }
             },
-            0x4 => { // D
+            Location::D => {
                 let result = self.add_with_carry8(self.d as u8, source_value, self.get_carry_flag());
-                self.set_d8(result);
+                
+                if lo_hi {
+                    self.set_dh(result);
+                } else {
+                    self.set_dl(result);
+                }
             },
-            0x5 => { // IDX
+            Location::Idx => {
                 let result = self.add_with_carry8(self.index_x as u8, source_value, self.get_carry_flag());
-                self.set_index_x8(result);
+                
+                if lo_hi {
+                    self.set_idxh(result);
+                } else {
+                    self.set_idxl(result);
+                }
             },
-            0x6 => { // IDY
+            Location::Idy => {
                 let result = self.add_with_carry8(self.index_y as u8, source_value, self.get_carry_flag());
-                self.set_index_y8(result);
+                
+                if lo_hi {
+                    self.set_idyh(result);
+                } else {
+                    self.set_idyl(result);
+                }
             },
-            0x7 => { // ADDR
+            Location::Address => {
                 let destination_address = self.fetch_address();
                 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0x8 => { // ADDR,IDX
+            Location::IndexedAddress => {
                 let destination_address = self.fetch_indexed_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0x9 => { // (ADDR)
+            Location::IndirectAddress => {
                 let destination_address = self.fetch_indirect_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0xA => { // (ADDR),IDX
+            Location::IndirectIndexedAddress => {
                 let destination_address = self.fetch_indirect_indexed_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0xB => { // (ADDR,IDX)
+            Location::IndexedIndirectAddress => {
                 let destination_address = self.fetch_indexed_indirect_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0xC => { // *IDY,IDX
+            Location::IndexedPointer => {
                 let destination_address = self.get_pointer_indexed_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0xD => { // (*IDY)
+            Location::IndirectPointer => {
                 let destination_address = self.get_pointer_indirect_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0xE => { // (*IDY),IDX
+            Location::IndirectIndexedPointer => {
                 let destination_address = self.get_pointer_indirect_indexed_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
 
                 self.memory_controller.write8(destination_address, result);
             },
-            0xF => { // (*IDY,IDX)
+            Location::IndexedIndirectPointer => {
                 let destination_address = self.get_pointer_indexed_indirect_address();
 
                 let result = self.add_with_carry8(self.memory_controller.read8(destination_address), source_value, self.get_carry_flag());
