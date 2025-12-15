@@ -26,25 +26,29 @@ fn main() {
     let high_byte = (ROM_FIRST_ADDRESS >> 8) as u8;
 
     rom.poke_bytes(cpu::RESET_VECTOR - ROM_FIRST_ADDRESS, &[low_byte, high_byte]);
-    rom.poke_bytes(0x0000, &[0x80, 0x10, 0x80, 0x80, 0x20, 0x08, 0x81, 0x12]);
+    rom.poke_bytes(0x0000, &[0x40, 0x10, 0x80, 0x40, 0x20, 0x08, 0x41, 0x12]);
 
     cpu.reset();
 
-    println!("Reset!");
+    println!("Reset!\n");
     cpu.print_state();
+    println!();
 
     cpu.step();
 
-    println!("Mov8 A, 0x80");
+    println!("Mov AL, 0x80\n");
     cpu.print_state();
+    println!();
 
     cpu.step();
 
-    println!("Mov8 B, 0x08");
+    println!("Mov BL, 0x08\n");
     cpu.print_state();
+    println!();
 
     cpu.step();
 
-    println!("Adc8 A, B");
+    println!("Adc AL, BL\n");
     cpu.print_state();
+    println!();
 }
