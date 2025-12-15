@@ -73,7 +73,7 @@ impl Location {
     }
 
     fn get_source_from_instruction(instruction: u16) -> Self {
-        let source = (instruction & 0xF000) >> 12;
+        let source = (instruction & 0x0F00) >> 8;
 
         match source {
             0x0 => Self::Immediate,
